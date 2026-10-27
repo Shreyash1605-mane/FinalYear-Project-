@@ -7,12 +7,17 @@ emergency transport.
 
 > **Research reference:** *Smart IoT-Based Emergency Ambulance and
 > Real-Time Green Corridor System* by Shreyash Udayrao Mane, Sanskruti
-> Sambhaji Patil, Sonali Shivaji Patil, Anuradha Rajendra Kapase, and
-> Prof. Satish Madhukar Ranbhise, Department of Computer Engineering, D.
-> Y. Patil Education Society (Deemed to be University), School of
-> Engineering and Management, Kolhapur, India. The project description
-> below follows the uploaded research paper. See [Research
-> Paper](#research-paper).
+> Sambhaji Patil, Sonali Shivaji Patil, Anuradha Rajendra Kapase, and Amruta Anil Gunjkar
+>
+>         Under the Guidance of :
+>         Prof. Satish Madhukar Ranbhise,
+>         Department of Computer Engineering,
+>     D.Y. Patil Education Society (Deemed to be University),
+>     School of Engineering and Management, Kolhapur, India.
+>
+> 
+> The project description below follows the uploaded research paper.
+
 
 ## Table of Contents
 
