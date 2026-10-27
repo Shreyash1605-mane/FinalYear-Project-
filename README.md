@@ -6,8 +6,13 @@ and traffic-priority coordination to help reduce avoidable delays during
 emergency transport.
 
 > **Research reference:** *Smart IoT-Based Emergency Ambulance and
-> Real-Time Green Corridor System* by Shreyash Udayrao Mane, Sanskruti
-> Sambhaji Patil, Sonali Shivaji Patil, Anuradha Rajendra Kapase, and Amruta Anil Gunjkar
+> Real-Time Green Corridor System*
+>      by
+> Shreyash Udayrao Mane,
+> Sanskruti Sambhaji Patil,
+> Sonali Shivaji Patil,
+> Anuradha Rajendra Kapase,
+> Amruta Anil Gunjkar
 >
 >         Under the Guidance of :
 >         Prof. Satish Madhukar Ranbhise,
