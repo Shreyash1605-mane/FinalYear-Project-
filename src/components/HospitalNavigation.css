@@ -1,0 +1,149 @@
+
+.hospital-navigation {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  box-sizing: border-box;
+  font-family: Arial, sans-serif;
+  color: #202124;
+}
+
+.navigation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.navigation-header h2 {
+  margin: 0 0 8px;
+  font-size: 25px;
+}
+
+.navigation-header p {
+  margin: 0;
+  color: #5f6368;
+}
+
+.navigation-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin-bottom: 18px;
+}
+
+.navigation-controls label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.navigation-controls select {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background: white;
+  font-size: 15px;
+}
+
+.hospital-navigation button {
+  padding: 11px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #1967d2;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hospital-navigation button:hover {
+  background: #174ea6;
+}
+
+.hospital-navigation button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.route-summary {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+}
+
+.route-summary div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.route-summary span {
+  color: #5f6368;
+  font-size: 13px;
+}
+
+.route-summary strong {
+  font-size: 18px;
+}
+
+.route-summary button {
+  margin-left: auto;
+}
+
+.hospital-list {
+  margin-top: 24px;
+}
+
+.hospital-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #dadce0;
+}
+
+.hospital-card p {
+  margin: 6px 0 0;
+  color: #5f6368;
+  font-size: 14px;
+}
+
+.error-message {
+  color: #b3261e;
+  background: #fce8e6;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+@media (max-width: 600px) {
+  .hospital-navigation {
+    padding: 12px;
+  }
+
+  .navigation-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .navigation-header h2 {
+    font-size: 21px;
+  }
+
+  .route-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .route-summary button {
+    margin-left: 0;
+  }
+}

@@ -1,0 +1,47 @@
+type Ambulance @table {
+  licensePlate: String!
+  status: String!
+  currentLat: Float!
+  currentLng: Float!
+  lastMaintenanceDate: Date
+}
+
+type Patient @table {
+  fullName: String!
+  dateOfBirth: Date!
+  bloodType: String!
+  medicalHistory: String!
+  emergencyContactName: String
+  emergencyContactPhone: String
+}
+
+type TelemetrySession @table {
+  startTime: Timestamp!
+  currentVitals: String!
+  ecgDataStream: String!
+  ambulance: Ambulance!
+  patient: Patient!
+}
+
+type Hospital @table {
+  name: String!
+  locationLat: Float!
+  locationLng: Float!
+  address: String!
+  departmentContactNumber: String
+  currentCapacityStatus: String
+}
+
+type TreatmentLog @table {
+  timestamp: Timestamp!
+  actionType: String!
+  description: String!
+  telemetrySession: TelemetrySession!
+}
+
+type Alert @table {
+  type: String!
+  severity: String!
+  timestamp: Timestamp!
+  telemetrySession: TelemetrySession!
+}
