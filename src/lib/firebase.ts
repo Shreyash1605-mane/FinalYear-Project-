@@ -1,7 +1,7 @@
-import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, type User } from 'firebase/auth';
-import { getAnalytics, isSupported } from 'firebase/analytics';
-import { getFirestore } from 'firebase/firestore';
+import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, signInAnonymously, type Auth, type User } from 'firebase/auth';
+import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,15 +13,28 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const hasFirebaseConfig = [
+  firebaseConfig.apiKey,
+  firebaseConfig.authDomain,
+  firebaseConfig.projectId,
+  firebaseConfig.appId,
+].every((value) => typeof value === 'string' && value.trim().length > 0);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const analytics = isSupported().then((supported) => (
-  supported ? getAnalytics(app) : null
-));
+const app: FirebaseApp | null = hasFirebaseConfig
+  ? getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
+  : null;
+
+export const auth: Auth | null = app ? getAuth(app) : null;
+export const db: Firestore | null = app ? getFirestore(app) : null;
+export const analytics: Promise<Analytics | null> = app
+  ? isSupported().then((supported) => (supported ? getAnalytics(app) : null))
+  : Promise.resolve(null);
 
 export async function ensureFirebaseUser(): Promise<User> {
+  if (!auth) {
+    throw new Error('Firebase is not configured. Add the required VITE_FIREBASE_* values to your local .env file.');
+  }
+
   if (auth.currentUser) return auth.currentUser;
   const credentials = await signInAnonymously(auth);
   return credentials.user;

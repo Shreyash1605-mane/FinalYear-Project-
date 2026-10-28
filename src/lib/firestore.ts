@@ -31,14 +31,19 @@ interface DashboardSnapshot {
 const updatedAt = () => serverTimestamp();
 
 export async function saveDashboardSnapshot(snapshot: DashboardSnapshot): Promise<void> {
-  const batch = writeBatch(db);
-  const patientRef = doc(collection(db, 'Patient'), snapshot.patient.id);
-  const doctorRef = doc(collection(db, 'doctors'), snapshot.doctor.id);
-  const ambulanceRef = doc(collection(db, 'Ambulance'), snapshot.ambulance.ambulanceId);
+  if (!db) {
+    throw new Error('Firebase is not configured. Add the required VITE_FIREBASE_* values to your local .env file.');
+  }
+
+  const firestore = db;
+  const batch = writeBatch(firestore);
+  const patientRef = doc(collection(firestore, 'Patient'), snapshot.patient.id);
+  const doctorRef = doc(collection(firestore, 'doctors'), snapshot.doctor.id);
+  const ambulanceRef = doc(collection(firestore, 'Ambulance'), snapshot.ambulance.ambulanceId);
   const telemetrySessionId = `${snapshot.ambulance.ambulanceId}_${snapshot.patient.id}`;
-  const telemetrySessionRef = doc(collection(db, 'TelemetrySession'), telemetrySessionId);
-  const adminRef = doc(collection(db, 'admins'), 'system-admin');
-  const systemRef = doc(collection(db, 'system'), 'dashboard');
+  const telemetrySessionRef = doc(collection(firestore, 'TelemetrySession'), telemetrySessionId);
+  const adminRef = doc(collection(firestore, 'admins'), 'system-admin');
+  const systemRef = doc(collection(firestore, 'system'), 'dashboard');
 
   batch.set(patientRef, {
     fullName: snapshot.patient.name,
@@ -73,7 +78,7 @@ export async function saveDashboardSnapshot(snapshot: DashboardSnapshot): Promis
   }, { merge: true });
 
   for (const hospital of hospitalLocations) {
-    batch.set(doc(collection(db, 'Hospital'), hospital.id), {
+    batch.set(doc(collection(firestore, 'Hospital'), hospital.id), {
       name: hospital.name,
       locationLat: hospital.lat,
       locationLng: hospital.lng,
@@ -99,7 +104,7 @@ export async function saveDashboardSnapshot(snapshot: DashboardSnapshot): Promis
   }, { merge: true });
 
   for (const treatment of snapshot.treatments) {
-    batch.set(doc(collection(db, 'TreatmentLog'), treatment.id), {
+    batch.set(doc(collection(firestore, 'TreatmentLog'), treatment.id), {
       timestamp: updatedAt(),
       actionType: treatment.category ?? 'TREATMENT',
       description: treatment.description,
@@ -110,7 +115,7 @@ export async function saveDashboardSnapshot(snapshot: DashboardSnapshot): Promis
   }
 
   for (const medication of snapshot.medications) {
-    batch.set(doc(collection(db, 'TreatmentLog'), `medication_${medication.id}`), {
+    batch.set(doc(collection(firestore, 'TreatmentLog'), `medication_${medication.id}`), {
       timestamp: updatedAt(),
       actionType: 'MEDICATION',
       description: `${medication.name} ${medication.dosage}`,
@@ -121,7 +126,7 @@ export async function saveDashboardSnapshot(snapshot: DashboardSnapshot): Promis
   }
 
   for (const alert of snapshot.alerts) {
-    batch.set(doc(collection(db, 'Alert'), alert.id), {
+    batch.set(doc(collection(firestore, 'Alert'), alert.id), {
       type: alert.type,
       severity: alert.type === 'critical' ? 'HIGH' : alert.type === 'warning' ? 'MEDIUM' : 'LOW',
       timestamp: updatedAt(),
