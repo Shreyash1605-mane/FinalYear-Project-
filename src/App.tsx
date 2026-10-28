@@ -2,7 +2,6 @@ import React from 'react';
 import { AmbulanceProvider, useAmbulance } from './context/AmbulanceContext';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { InfoBanner } from './components/InfoBanner';
 
 // Import View Page Components
 import { DashboardOverview } from './views/DashboardOverview';
@@ -60,9 +59,6 @@ const AppContent: React.FC = () => {
 
       {/* Main Container */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Software Description & Key Features Info Banner */}
-        <InfoBanner />
-
         {/* Left Navigation Sidebar */}
         <Sidebar />
 

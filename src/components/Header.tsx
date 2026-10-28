@@ -1,13 +1,11 @@
 import React from 'react';
-import { Bell, Volume2, VolumeX, Info, ShieldAlert, LogOut, User } from 'lucide-react';
+import { Bell, Volume2, VolumeX, ShieldAlert, LogOut, User } from 'lucide-react';
 import { useAmbulance } from '../context/AmbulanceContext';
 
 export const Header: React.FC = () => {
   const {
     isAudioMuted,
     setIsAudioMuted,
-    showInfoBanner,
-    setShowInfoBanner,
     alerts,
     setShowSosModal,
     isAuthenticated,
@@ -19,17 +17,6 @@ export const Header: React.FC = () => {
   return (
     <header className="bg-[#0b1328] border-b border-slate-800/80 px-4 py-3 flex items-center justify-between sticky top-0 z-30 shadow-lg select-none">
       <div className="flex items-center space-x-3">
-        <button
-          onClick={() => setShowInfoBanner(!showInfoBanner)}
-          className={`p-2 rounded-lg transition-all cursor-pointer ${
-            showInfoBanner
-              ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-              : 'bg-slate-800/60 text-slate-400 hover:text-slate-200'
-          }`}
-          title="Toggle Software Overview Banner"
-        >
-          <Info className="w-5 h-5" />
-        </button>
         <h1 className="text-lg font-bold tracking-wider text-slate-100 uppercase flex items-center gap-2">
           <span>AMBULANCE - LIVE MONITORING</span>
         </h1>

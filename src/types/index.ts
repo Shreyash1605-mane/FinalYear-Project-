@@ -44,6 +44,20 @@ export interface AmbulanceLocation {
   sirenActive?: boolean;
 }
 
+export interface AmbulanceTelemetry {
+  ambulanceId: string;
+  timestamp: number;
+  heartRate: number;
+  spo2: number;
+  bloodPressure: string;
+  respiratoryRate: number;
+  temperature: number;
+  ecgWaveform: number[];
+  cameraStreamUrl?: string;
+  intercomChannelId?: string;
+  connectionStatus: 'online' | 'offline';
+}
+
 export interface Treatment {
   id: string;
   time: string;

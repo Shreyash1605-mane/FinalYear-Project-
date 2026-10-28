@@ -14,7 +14,8 @@ export const EcgCanvas: React.FC<EcgCanvasProps> = ({ height: customHeight, colo
   const [speed, setSpeed] = useState('25 mm/s');
   const [scale, setScale] = useState('10 mm/mV');
   const [isEcgActive, setIsEcgActive] = useState<boolean>(false); // Start with clear flat baseline wave
-  const { triggerAudioBeep } = useAmbulance();
+  const { triggerAudioBeep, ecgWaveform } = useAmbulance();
+  const hasLiveWaveform = ecgWaveform.length > 1;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -30,6 +31,11 @@ export const EcgCanvas: React.FC<EcgCanvasProps> = ({ height: customHeight, colo
     const centerY = height / 2;
 
     const getPqstValue = (phase: number) => {
+      if (hasLiveWaveform) {
+        const sample = ecgWaveform[Math.floor(phase * ecgWaveform.length)] ?? 0;
+        return Math.max(-75, Math.min(75, sample));
+      }
+
       // If ECG is cleared/deactivated, return 0 (Flat baseline line)
       if (!isEcgActive) return 0;
 
@@ -99,7 +105,7 @@ export const EcgCanvas: React.FC<EcgCanvasProps> = ({ height: customHeight, colo
     return () => {
       cancelAnimationFrame(animationId);
     };
-  }, [speed, scale, selectedLead, isEcgActive, triggerAudioBeep, customColor]);
+  }, [speed, scale, selectedLead, isEcgActive, triggerAudioBeep, customColor, ecgWaveform, hasLiveWaveform]);
 
   return (
     <div className="dashboard-card p-4 flex flex-col justify-between relative overflow-hidden h-full">
@@ -122,8 +128,8 @@ export const EcgCanvas: React.FC<EcgCanvasProps> = ({ height: customHeight, colo
             }`}
             title="Toggle between Zero Baseline and Live ECG Wave Sweep"
           >
-            {isEcgActive ? <Pause className="w-3 h-3 text-emerald-400" /> : <Play className="w-3 h-3 text-blue-400" />}
-            <span>{isEcgActive ? 'Live Sweep Active' : 'Zero Baseline (Cleared)'}</span>
+            {isEcgActive || hasLiveWaveform ? <Pause className="w-3 h-3 text-emerald-400" /> : <Play className="w-3 h-3 text-blue-400" />}
+            <span>{hasLiveWaveform ? 'IoT ECG Live' : isEcgActive ? 'Live Sweep Active' : 'Zero Baseline (Cleared)'}</span>
           </button>
 
           <div className="flex items-center space-x-1">
@@ -166,8 +172,8 @@ export const EcgCanvas: React.FC<EcgCanvasProps> = ({ height: customHeight, colo
         />
 
         <div className="absolute bottom-2.5 right-3 flex items-center space-x-1.5 bg-slate-950/80 border border-emerald-500/40 px-2.5 py-1 rounded-full text-[11px] font-semibold text-emerald-400 backdrop-blur-sm">
-          <span className={`w-2 h-2 rounded-full ${isEcgActive ? 'bg-emerald-500 live-pulse-dot' : 'bg-slate-500'}`}></span>
-          <span>{isEcgActive ? 'Live Telemetry' : 'Zero Signal (Cleared)'}</span>
+          <span className={`w-2 h-2 rounded-full ${isEcgActive || hasLiveWaveform ? 'bg-emerald-500 live-pulse-dot' : 'bg-slate-500'}`}></span>
+          <span>{hasLiveWaveform ? 'IoT Live Telemetry' : isEcgActive ? 'Live Telemetry' : 'Zero Signal (Cleared)'}</span>
         </div>
       </div>
     </div>

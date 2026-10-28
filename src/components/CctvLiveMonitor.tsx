@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Mic, MicOff, Volume2, VolumeX, Radio, Eye, ShieldCheck } from 'lucide-react';
+import { useAmbulance } from '../context/AmbulanceContext';
 
 export const CctvLiveMonitor: React.FC = () => {
+  const { ambulance, telemetry } = useAmbulance();
   const [activeCam, setActiveCam] = useState<'cam1' | 'cam2' | 'cam3'>('cam1');
   const [isNightVision, setIsNightVision] = useState(false);
   
@@ -71,18 +73,28 @@ export const CctvLiveMonitor: React.FC = () => {
 
           <div className="bg-slate-950/80 backdrop-blur-sm border border-slate-800 px-3 py-1 rounded-lg text-right">
             <div className="text-white font-bold">{timeStr || 'LIVE'}</div>
-            <div className="text-[10px] text-emerald-400 font-semibold">AMB-108 CCTV-STREAM</div>
+            <div className="text-[10px] text-emerald-400 font-semibold">{ambulance.ambulanceId} CCTV-STREAM</div>
           </div>
         </div>
 
-        {/* Center Simulated Camera Stream Visual */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
-          <div className="w-48 h-48 border border-slate-700/60 rounded-full flex items-center justify-center">
-            <div className="w-24 h-24 border border-slate-700/80 rounded-full flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+        {telemetry?.cameraStreamUrl ? (
+          <video
+            src={telemetry.cameraStreamUrl}
+            autoPlay
+            muted
+            playsInline
+            controls
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none">
+            <div className="w-48 h-48 border border-slate-700/60 rounded-full flex items-center justify-center">
+              <div className="w-24 h-24 border border-slate-700/80 rounded-full flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Camera Selector Tabs Overlay */}
         <div className="z-10 flex flex-wrap justify-between items-end gap-2 pt-12">
@@ -104,7 +116,7 @@ export const CctvLiveMonitor: React.FC = () => {
 
           <span className="text-[11px] bg-slate-950/80 px-2.5 py-1 rounded border border-slate-800 text-slate-400 flex items-center gap-1 font-mono">
             <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span>Encrypted 5G Stream</span>
+          <span>{telemetry?.cameraStreamUrl ? 'Live IoT Camera Stream' : 'Waiting for camera stream'}</span>
           </span>
         </div>
       </div>

@@ -1,195 +1,186 @@
-import React, { useState } from 'react';
-import { MapPin, Gauge, Clock, ShieldCheck, Volume2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { Clock, Gauge, MapPin, Navigation, ShieldCheck, Volume2 } from 'lucide-react';
 import { useAmbulance } from '../context/AmbulanceContext';
+import { hospitalLocations } from '../data/hospitalLocations';
+
+type RouteState = {
+  coordinates: [number, number][];
+  distanceKm: number;
+  durationMins: number;
+};
+
+const createMarker = (color: string, label: string) =>
+  L.divIcon({
+    className: '',
+    html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px"><span style="transform:rotate(45deg)">${label}</span></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -34],
+  });
+
+const deviceIcon = createMarker('#2563eb', 'A');
+const hospitalIcon = createMarker('#16a34a', '+');
+
+const FitRouteBounds: React.FC<{ coordinates: [number, number][] }> = ({ coordinates }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (coordinates.length > 1) {
+      map.fitBounds(L.latLngBounds(coordinates), { padding: [48, 48], maxZoom: 15 });
+    }
+  }, [coordinates, map]);
+
+  return null;
+};
+
+const formatDuration = (minutes: number) => {
+  if (minutes < 1) return '<1 min';
+  const roundedMinutes = Math.round(minutes);
+  const hours = Math.floor(roundedMinutes / 60);
+  const remainingMinutes = roundedMinutes % 60;
+  return hours > 0 ? `${hours} hr ${remainingMinutes} min` : `${remainingMinutes} min`;
+};
 
 export const AmbulanceTracking: React.FC = () => {
-  const { ambulance } = useAmbulance();
-  const [sirenActive, setSirenActive] = useState(true);
-  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
+  const { ambulance, isAudioMuted, setIsAudioMuted } = useAmbulance();
+  const [selectedHospitalId, setSelectedHospitalId] = useState(hospitalLocations[0].id);
+  const [route, setRoute] = useState<RouteState | null>(null);
+  const [routeStatus, setRouteStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [routeError, setRouteError] = useState<string | null>(null);
 
-  const handleZoomIn = () => {
-    setZoomLevel((prev) => Math.min(2.5, Number((prev + 0.25).toFixed(2))));
-  };
+  const source: [number, number] = [ambulance.lat, ambulance.lng];
+  const selectedHospital = useMemo(
+    () => hospitalLocations.find((hospital) => hospital.id === selectedHospitalId) ?? hospitalLocations[0],
+    [selectedHospitalId],
+  );
+  const sourceLat = ambulance.lat;
+  const sourceLng = ambulance.lng;
+  const destinationLat = selectedHospital.lat;
+  const destinationLng = selectedHospital.lng;
+  const destination: [number, number] = [destinationLat, destinationLng];
+  const routeCoordinates = route?.coordinates ?? [source, destination];
+  const distanceKm = route?.distanceKm ?? 0;
+  const durationMins = route?.durationMins ?? 0;
 
-  const handleZoomOut = () => {
-    setZoomLevel((prev) => Math.max(0.6, Number((prev - 0.25).toFixed(2))));
-  };
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadRoute = async () => {
+      setRouteStatus('loading');
+      setRouteError(null);
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${sourceLng},${sourceLat};${destinationLng},${destinationLat}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`Routing service returned ${response.status}.`);
+        const data = (await response.json()) as {
+          code?: string;
+          routes?: Array<{
+            distance: number;
+            duration: number;
+            geometry: { coordinates: [number, number][] };
+          }>;
+        };
+        const osrmRoute = data.routes?.[0];
+        if (data.code !== 'Ok' || !osrmRoute) throw new Error('No drivable route was found.');
 
-  const handleResetZoom = () => {
-    setZoomLevel(1.0);
-  };
+        setRoute({
+          coordinates: osrmRoute.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+          distanceKm: osrmRoute.distance / 1000,
+          durationMins: osrmRoute.duration / 60,
+        });
+        setRouteStatus('ready');
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setRoute(null);
+        setRouteStatus('error');
+        setRouteError(error instanceof Error ? error.message : 'Unable to load the route.');
+      }
+    };
 
-  // Calculate dynamic viewBox centered around 1000x600 for SVG zoom
-  const vbWidth = 1000 / zoomLevel;
-  const vbHeight = 600 / zoomLevel;
-  const vbX = (1000 - vbWidth) / 2;
-  const vbY = (600 - vbHeight) / 2;
+    void loadRoute();
+    return () => controller.abort();
+  }, [destinationLat, destinationLng, sourceLat, sourceLng]);
 
   return (
-    <div className="p-4 space-y-4 h-[calc(100vh-80px)] flex flex-col">
-      {/* Map Container */}
-      <div className="relative flex-1 rounded-2xl overflow-hidden border border-slate-700/80 bg-[#091322] shadow-2xl">
-        {/* Floating Interactive Zoom Toolbar */}
-        <div className="absolute top-6 left-6 z-20 flex items-center space-x-1 bg-[#0b1328]/90 border border-slate-700/80 backdrop-blur-md p-1.5 rounded-xl shadow-xl text-slate-200 text-xs font-semibold">
-          <button
-            onClick={handleZoomIn}
-            className="p-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer flex items-center gap-1"
-            title="Zoom In (+)"
+    <div className="p-4 space-y-4 min-h-[calc(100vh-80px)]">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-700/80 bg-slate-900/90 p-4">
+        <div>
+          <h1 className="flex items-center gap-2 text-lg font-extrabold text-white">
+            <Navigation className="h-5 w-5 text-blue-400" /> Live Ambulance Tracking
+          </h1>
+          <p className="mt-1 text-xs text-slate-400">Device location to the selected hospital using the shortest available road route.</p>
+        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+          Destination hospital
+          <select
+            value={selectedHospital.id}
+            onChange={(event) => setSelectedHospitalId(event.target.value)}
+            className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-blue-400"
           >
-            <ZoomIn className="w-4 h-4 text-blue-400" />
-            <span className="hidden sm:inline">Zoom In</span>
-          </button>
+            {hospitalLocations.map((hospital) => (
+              <option key={hospital.id} value={hospital.id}>{hospital.name}</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
-          <span className="px-2 font-mono text-slate-400 text-[11px]">
-            {Math.round(zoomLevel * 100)}%
-          </span>
-
-          <button
-            onClick={handleZoomOut}
-            className="p-2 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg transition-all cursor-pointer flex items-center gap-1"
-            title="Zoom Out (-)"
-          >
-            <ZoomOut className="w-4 h-4 text-amber-400" />
-            <span className="hidden sm:inline">Zoom Out</span>
-          </button>
-
-          <button
-            onClick={handleResetZoom}
-            className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer border-l border-slate-700/80 ml-1 pl-2"
-            title="Reset Zoom (100%)"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_290px]">
+        <div className="relative min-h-[560px] overflow-hidden rounded-2xl border border-slate-700/80 bg-slate-900 shadow-2xl">
+          <MapContainer center={source} zoom={14} className="h-[560px] w-full">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <Marker position={source} icon={deviceIcon}>
+              <Popup><strong>Ambulance device location</strong><br />AMB-108 telemetry source</Popup>
+            </Marker>
+            <Marker position={destination} icon={hospitalIcon}>
+              <Popup><strong>{selectedHospital.name}</strong><br />Selected destination hospital</Popup>
+            </Marker>
+            {route && (
+              <Polyline positions={route.coordinates} pathOptions={{ color: '#2563eb', weight: 7, opacity: 0.9 }} />
+            )}
+            <FitRouteBounds coordinates={routeCoordinates} />
+          </MapContainer>
+          {routeStatus === 'loading' && (
+            <div className="absolute left-4 top-4 z-[1000] rounded-lg bg-slate-950/90 px-3 py-2 text-xs text-blue-200">
+              Calculating shortest road route...
+            </div>
+          )}
+          {routeStatus === 'error' && (
+            <div className="absolute left-4 right-4 top-4 z-[1000] rounded-lg border border-amber-500/40 bg-slate-950/95 px-3 py-2 text-xs text-amber-200">
+              {routeError} Distance and ETA are unavailable until routing reconnects.
+            </div>
+          )}
         </div>
 
-        {/* SVG Vector Map Rendering matching Thumbnail 3 with Dynamic Zoom */}
-        <svg
-          className="w-full h-full object-cover transition-all duration-300 ease-out"
-          viewBox={`${vbX} ${vbY} ${vbWidth} ${vbHeight}`}
-        >
-          {/* Map Grid Patterns */}
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth="0.8" />
-            </pattern>
-          </defs>
-          <rect width="1000" height="600" fill="#091322" />
-          <rect width="1000" height="600" fill="url(#grid)" />
-
-          {/* Road Networks */}
-          <path d="M 0 200 Q 400 150 700 350 T 1000 300" fill="none" stroke="#1e293b" strokeWidth="40" />
-          <path d="M 300 0 L 300 600 M 700 0 L 700 600" fill="none" stroke="#1e293b" strokeWidth="24" />
-          <path d="M 0 450 L 1000 450" fill="none" stroke="#1e293b" strokeWidth="18" />
-
-          {/* Red Route Line matching Thumbnail 3 */}
-          <path
-            d="M 150 480 Q 380 400 620 220 T 820 120"
-            fill="none"
-            stroke="#ef4444"
-            strokeWidth="5"
-            strokeDasharray="8 4"
-          />
-
-          {/* Route Waypoints (Red Dots) */}
-          {[
-            { x: 150, y: 480 },
-            { x: 280, y: 430 },
-            { x: 410, y: 350 },
-            { x: 520, y: 280 },
-            { x: 620, y: 220 },
-            { x: 740, y: 160 },
-            { x: 820, y: 120 },
-          ].map((pt, i) => (
-            <circle key={i} cx={pt.x} cy={pt.y} r="5" fill="#ef4444" stroke="#ffffff" strokeWidth="1.5" />
-          ))}
-
-          {/* Moving Ambulance Vehicle Icon matching Thumbnail 3 */}
-          <g transform="translate(410, 350)">
-            <circle r="22" fill="#ef4444" fillOpacity="0.2" className="animate-ping" />
-            <rect x="-18" y="-12" width="36" height="24" rx="4" fill="#ffffff" stroke="#ef4444" strokeWidth="3" />
-            <text x="0" y="4" textAnchor="middle" fontSize="10" fontWeight="bold" fill="#ef4444">
-              AMB
-            </text>
-          </g>
-
-          {/* Hospital Destination Pin */}
-          <g transform="translate(820, 120)">
-            <circle r="30" fill="#3b82f6" fillOpacity="0.15" />
-            <path
-              d="M 0 -20 C -8 -20 -14 -14 -14 -6 C -14 8 0 20 0 20 C 0 20 14 8 14 -6 C 14 -14 8 -20 0 -20 Z"
-              fill="#2563eb"
-              stroke="#ffffff"
-              strokeWidth="2"
-            />
-            <text x="0" y="-3" textAnchor="middle" fontSize="12" fontWeight="bold" fill="#ffffff">
-              +
-            </text>
-            <text x="0" y="34" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#ffffff">
-              St. Jude Hospital
-            </text>
-          </g>
-        </svg>
-
-        {/* Floating Telemetry Box overlay matching Thumbnail 3 */}
-        <div className="absolute top-6 right-6 w-72 bg-[#0b1328]/90 border border-slate-700/80 backdrop-blur-md rounded-2xl p-5 shadow-2xl text-slate-100 z-10">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+        <aside className="rounded-2xl border border-slate-700/80 bg-[#0b1328]/95 p-5 text-slate-100 shadow-xl">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <div>
-              <h3 className="text-base font-extrabold text-white tracking-wide">Ambulance</h3>
-              <div className="text-xs text-slate-400 font-mono">AMB-108</div>
+              <h2 className="font-extrabold">AMB-108</h2>
+              <p className="text-xs text-slate-400">Live device telemetry</p>
             </div>
             <button
-              onClick={() => setSirenActive(!sirenActive)}
-              className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                sirenActive ? 'bg-red-500/20 text-red-400 border border-red-500/40' : 'bg-slate-800 text-slate-400'
-              }`}
-              title="Toggle Siren Telemetry"
+              onClick={() => setIsAudioMuted(!isAudioMuted)}
+              className={`rounded-lg p-2 ${isAudioMuted ? 'bg-slate-800 text-slate-400' : 'bg-red-500/20 text-red-400'}`}
+              title={isAudioMuted ? 'Unmute siren' : 'Mute siren'}
             >
-              <Volume2 className="w-4 h-4" />
+              <Volume2 className="h-4 w-4" />
             </button>
           </div>
-
-          <div className="space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400">Status</span>
-              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>{ambulance.status}</span>
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Gauge className="w-4 h-4 text-blue-400" />
-                <span>Speed</span>
-              </span>
-              <span className="text-white font-bold font-mono">{ambulance.speedKmh} km/h</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-amber-400" />
-                <span>ETA</span>
-              </span>
-              <span className="text-white font-bold font-mono">{ambulance.etaMins} mins</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-emerald-400" />
-                <span>Distance</span>
-              </span>
-              <span className="text-white font-bold font-mono">{ambulance.distanceKm} km</span>
-            </div>
+          <div className="mt-5 space-y-4 text-sm">
+            <div className="flex items-center justify-between"><span className="text-slate-400">Destination</span><strong className="max-w-[150px] text-right text-white">{selectedHospital.name}</strong></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-slate-400"><MapPin className="h-4 w-4 text-blue-400" />Device source</span><strong className="text-white">{source[0].toFixed(4)}, {source[1].toFixed(4)}</strong></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-slate-400"><Navigation className="h-4 w-4 text-blue-400" />Shortest route</span><strong className="text-white">{routeStatus === 'ready' ? `${distanceKm.toFixed(1)} km` : '--'}</strong></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-slate-400"><Clock className="h-4 w-4 text-amber-400" />ETA</span><strong className="text-white">{routeStatus === 'ready' ? formatDuration(durationMins) : '--'}</strong></div>
+            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-slate-400"><Gauge className="h-4 w-4 text-emerald-400" />Speed</span><strong className="text-white">{ambulance.speedKmh} km/h</strong></div>
           </div>
-
-          <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-            <span className="flex items-center gap-1 text-emerald-400">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>GPS Lock: High</span>
-            </span>
-            <span className="font-mono">Live Sync</span>
+          <div className="mt-6 flex items-center gap-2 border-t border-slate-800 pt-4 text-xs text-emerald-400">
+            <ShieldCheck className="h-4 w-4" /> {routeStatus === 'ready' ? 'Route synchronized' : 'Waiting for route'}
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   );

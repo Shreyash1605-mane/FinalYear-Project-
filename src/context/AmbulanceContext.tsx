@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type {
   VitalMetric,
   PatientInfo,
@@ -8,14 +8,18 @@ import type {
   AlertItem,
   DoctorUser,
   ViewTab,
+  AmbulanceTelemetry,
 } from '../types';
 import { rankalaLocation, hospitalLocations } from '../data/hospitalLocations';
 import { saveDashboardSnapshot } from '../lib/firestore';
+import { subscribeToAmbulanceTelemetry } from '../lib/telemetry';
 
 interface AmbulanceContextType {
   activeTab: ViewTab;
   setActiveTab: (tab: ViewTab) => void;
   vitals: VitalMetric[];
+  ecgWaveform: number[];
+  telemetry: AmbulanceTelemetry | null;
   patient: PatientInfo;
   ambulance: AmbulanceLocation;
   treatments: Treatment[];
@@ -33,8 +37,6 @@ interface AmbulanceContextType {
   setShowSosModal: (show: boolean) => void;
   isAudioMuted: boolean;
   setIsAudioMuted: (muted: boolean) => void;
-  showInfoBanner: boolean;
-  setShowInfoBanner: (show: boolean) => void;
   databaseStatus: 'idle' | 'syncing' | 'synced' | 'error';
   databaseError: string | null;
   triggerAudioBeep: (type?: 'ecg' | 'sos') => void;
@@ -115,9 +117,11 @@ const initialPatient: PatientInfo = {
   photoUrl: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
 };
 
+const configuredAmbulanceId = import.meta.env.VITE_AMBULANCE_ID || 'AMB-108';
+
 // Initial Ambulance Telemetry Location converted to zero initial telemetry baseline
 const initialAmbulance: AmbulanceLocation = {
-  ambulanceId: 'AMB-108',
+  ambulanceId: configuredAmbulanceId,
   status: 'Standby / Telemetry Ready',
   distanceKm: 0.0,
   etaMins: 0,
@@ -155,9 +159,11 @@ const AmbulanceContext = createContext<AmbulanceContextType | undefined>(undefin
 
 export const AmbulanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
-  const [vitals] = useState<VitalMetric[]>(initialVitals);
+  const [vitals, setVitals] = useState<VitalMetric[]>(initialVitals);
+  const [ecgWaveform, setEcgWaveform] = useState<number[]>([]);
+  const [telemetry, setTelemetry] = useState<AmbulanceTelemetry | null>(null);
   const [patient] = useState<PatientInfo>(initialPatient);
-  const [ambulance] = useState<AmbulanceLocation>(initialAmbulance);
+  const [ambulance, setAmbulance] = useState<AmbulanceLocation>(initialAmbulance);
   const [treatments, setTreatments] = useState<Treatment[]>(initialTreatments);
   const [medications, setMedications] = useState<Medication[]>(initialMedications);
   const [alerts] = useState<AlertItem[]>(initialAlerts);
@@ -173,9 +179,52 @@ export const AmbulanceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [showMessageDrawer, setShowMessageDrawer] = useState(false);
   const [showSosModal, setShowSosModal] = useState(false);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
-  const [showInfoBanner, setShowInfoBanner] = useState(true);
   const [databaseStatus, setDatabaseStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const [databaseError, setDatabaseError] = useState<string | null>(null);
+  const sirenRef = useRef<{
+    context: AudioContext;
+    oscillator: OscillatorNode;
+    gain: GainNode;
+    intervalId: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAmbulanceTelemetry(
+      configuredAmbulanceId,
+      (nextTelemetry) => {
+        setTelemetry(nextTelemetry);
+        setEcgWaveform(nextTelemetry.ecgWaveform);
+        setVitals((currentVitals) => currentVitals.map((vital) => {
+          const nextValue: number | string = vital.id === 'hr'
+            ? nextTelemetry.heartRate
+            : vital.id === 'spo2'
+              ? nextTelemetry.spo2
+              : vital.id === 'bp'
+                ? nextTelemetry.bloodPressure
+                : vital.id === 'rr'
+                  ? nextTelemetry.respiratoryRate
+                  : nextTelemetry.temperature.toFixed(1);
+
+          const numericValue = typeof nextValue === 'number' ? nextValue : Number(nextValue);
+          return {
+            ...vital,
+            value: nextValue,
+            history: [...vital.history.slice(-7), Number.isFinite(numericValue) ? numericValue : 0],
+          };
+        }));
+        setAmbulance((currentAmbulance) => ({
+          ...currentAmbulance,
+          status: nextTelemetry.connectionStatus === 'online' ? 'Live IoT Telemetry' : 'Telemetry Offline',
+        }));
+      },
+      (error) => {
+        setDatabaseStatus('error');
+        setDatabaseError(`Unable to subscribe to ${configuredAmbulanceId} telemetry: ${error.message}`);
+      },
+    );
+
+    return unsubscribe;
+  }, []);
 
   const loginDoctor = (email: string, _pass: string, department: string) => {
     setCurrentDoctor({
@@ -196,35 +245,69 @@ export const AmbulanceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setActiveTab('login');
   };
 
+  const stopSiren = () => {
+    const siren = sirenRef.current;
+    if (!siren) return;
+
+    window.clearInterval(siren.intervalId);
+    siren.oscillator.stop();
+    void siren.context.close();
+    sirenRef.current = null;
+  };
+
+  useEffect(() => stopSiren, []);
+  useEffect(() => {
+    if (isAudioMuted) stopSiren();
+  }, [isAudioMuted]);
+
   const triggerAudioBeep = (type: 'ecg' | 'sos' = 'ecg') => {
     if (isAudioMuted) return;
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtx) return;
+
+      if (type === 'sos') {
+        stopSiren();
+
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const scheduleWail = () => {
+          const now = ctx.currentTime;
+          osc.frequency.cancelScheduledValues(now);
+          osc.frequency.setValueAtTime(650, now);
+          osc.frequency.linearRampToValueAtTime(1100, now + 0.6);
+          osc.frequency.linearRampToValueAtTime(650, now + 1.2);
+        };
+
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        scheduleWail();
+
+        sirenRef.current = {
+          context: ctx,
+          oscillator: osc,
+          gain,
+          intervalId: window.setInterval(scheduleWail, 1200),
+        };
+        return;
+      }
+
       const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      if (type === 'sos') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.4);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.4);
-      } else {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1000, ctx.currentTime);
-        gain.gain.setValueAtTime(0.08, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.12);
-      }
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, ctx.currentTime);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
     } catch {
       // Audio context safety catch
     }
@@ -279,6 +362,8 @@ export const AmbulanceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         activeTab,
         setActiveTab,
         vitals,
+        ecgWaveform,
+        telemetry,
         patient,
         ambulance,
         treatments,
@@ -296,8 +381,6 @@ export const AmbulanceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setShowSosModal,
         isAudioMuted,
         setIsAudioMuted,
-        showInfoBanner,
-        setShowInfoBanner,
         databaseStatus,
         databaseError,
         triggerAudioBeep,

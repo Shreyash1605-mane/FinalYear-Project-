@@ -671,3 +671,36 @@ Management, Kolhapur, India**.
 Please update this README as the repository evolves so that implemented
 features, tested hardware, deployment instructions, and verified results
 remain accurate.
+
+## Live IoT Telemetry Ingestion
+
+The dashboard subscribes to the live telemetry document for the configured
+ambulance ID:
+
+```text
+Ambulance/{ambulanceId}/telemetry/live
+```
+
+Set `VITE_AMBULANCE_ID` in `.env.local` to select the ambulance shown by the
+dashboard. A hardware gateway should write a document with this shape:
+
+```json
+{
+  "ambulanceId": "AMB-108",
+  "heartRate": 82,
+  "spo2": 98,
+  "bloodPressure": "120/80",
+  "respiratoryRate": 16,
+  "temperature": 36.8,
+  "ecgWaveform": [0.02, 0.1, -0.04, 0.8, -0.2],
+  "cameraStreamUrl": "https://gateway.example/ambulances/AMB-108/camera",
+  "intercomChannelId": "intercom-AMB-108",
+  "connectionStatus": "online"
+}
+```
+
+The browser listener and the typed hardware-gateway write entry point are in
+`src/lib/telemetry.ts`. Firestore is suitable for the latest telemetry
+snapshot and signaling metadata; the camera and two-way voice media must be
+provided by a WebRTC/media gateway referenced by `cameraStreamUrl` and
+`intercomChannelId`.
