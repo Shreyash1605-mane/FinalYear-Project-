@@ -5,15 +5,17 @@ import type { AmbulanceTelemetry } from '../types';
 export const ambulanceTelemetryPath = (ambulanceId: string) =>
   `Ambulance/${ambulanceId}/telemetry/live`;
 
-const telemetryDocument = (ambulanceId: string) =>
-  doc(db, 'Ambulance', ambulanceId, 'telemetry', 'live');
-
 export function subscribeToAmbulanceTelemetry(
   ambulanceId: string,
   onTelemetry: (telemetry: AmbulanceTelemetry) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
-  return onSnapshot(telemetryDocument(ambulanceId), (snapshot) => {
+  if (!db) {
+    onError(new Error('Firebase is not configured. Add the required VITE_FIREBASE_* values to your local .env file.'));
+    return () => undefined;
+  }
+
+  return onSnapshot(doc(db, 'Ambulance', ambulanceId, 'telemetry', 'live'), (snapshot) => {
     if (!snapshot.exists()) return;
 
     const data = snapshot.data();
@@ -45,7 +47,11 @@ export function subscribeToAmbulanceTelemetry(
 export async function publishAmbulanceTelemetry(
   telemetry: Omit<AmbulanceTelemetry, 'timestamp'>,
 ): Promise<void> {
-  await setDoc(telemetryDocument(telemetry.ambulanceId), {
+  if (!db) {
+    throw new Error('Firebase is not configured. Add the required VITE_FIREBASE_* values to your local .env file.');
+  }
+
+  await setDoc(doc(db, 'Ambulance', telemetry.ambulanceId, 'telemetry', 'live'), {
     ...telemetry,
     timestamp: serverTimestamp(),
     updatedAt: serverTimestamp(),

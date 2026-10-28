@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Mic, MicOff, Volume2, VolumeX, Radio, Eye, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Camera, CameraOff, Mic, MicOff, Volume2, VolumeX, Radio, Eye, ShieldCheck } from 'lucide-react';
 import { useAmbulance } from '../context/AmbulanceContext';
 
 export const CctvLiveMonitor: React.FC = () => {
@@ -12,6 +12,9 @@ export const CctvLiveMonitor: React.FC = () => {
   const [isSpeakerActive, setIsSpeakerActive] = useState(true);      // Hear paramedic voice
   const [speakerVolume, setSpeakerVolume] = useState(80);
   const [timeStr, setTimeStr] = useState('');
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -19,6 +22,45 @@ export const CctvLiveMonitor: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+  }, [cameraStream]);
+
+  const startMobileCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera access is not available in this browser.');
+      return;
+    }
+
+    try {
+      cameraStream?.getTracks().forEach((track) => track.stop());
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      setCameraError(null);
+      setCameraStream(stream);
+    } catch (error) {
+      const message = error instanceof DOMException && error.name === 'NotAllowedError'
+        ? 'Camera permission was denied. Allow camera access and try again.'
+        : error instanceof DOMException && error.name === 'NotFoundError'
+          ? 'No camera was found on this device.'
+          : 'Unable to start the mobile camera.';
+      setCameraError(message);
+    }
+  };
+
+  const stopMobileCamera = () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+  };
 
   const cameras = [
     { id: 'cam1', name: 'Cam 1: Patient Bed Bay', angle: 'Interior Patient Bay (Wide HD)' },
@@ -77,7 +119,15 @@ export const CctvLiveMonitor: React.FC = () => {
           </div>
         </div>
 
-        {telemetry?.cameraStreamUrl ? (
+        {cameraStream ? (
+          <video
+            ref={localVideoRef}
+            autoPlay
+            muted
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : telemetry?.cameraStreamUrl ? (
           <video
             src={telemetry.cameraStreamUrl}
             autoPlay
@@ -95,6 +145,21 @@ export const CctvLiveMonitor: React.FC = () => {
             </div>
           </div>
         )}
+
+        <div className="absolute bottom-14 left-4 z-20 max-w-[calc(100%-2rem)]">
+          <button
+            onClick={cameraStream ? stopMobileCamera : startMobileCamera}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold shadow-lg ${
+              cameraStream
+                ? 'bg-red-600 text-white hover:bg-red-500'
+                : 'bg-blue-600 text-white hover:bg-blue-500'
+            }`}
+          >
+            {cameraStream ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+            {cameraStream ? 'Stop Mobile Camera' : 'Start Mobile Camera'}
+          </button>
+          {cameraError && <p className="mt-2 rounded-md bg-slate-950/90 px-2 py-1 text-[11px] text-red-300">{cameraError}</p>}
+        </div>
 
         {/* Camera Selector Tabs Overlay */}
         <div className="z-10 flex flex-wrap justify-between items-end gap-2 pt-12">
@@ -116,7 +181,7 @@ export const CctvLiveMonitor: React.FC = () => {
 
           <span className="text-[11px] bg-slate-950/80 px-2.5 py-1 rounded border border-slate-800 text-slate-400 flex items-center gap-1 font-mono">
             <ShieldCheck className="w-3 h-3 text-emerald-400" />
-          <span>{telemetry?.cameraStreamUrl ? 'Live IoT Camera Stream' : 'Waiting for camera stream'}</span>
+          <span>{cameraStream ? 'Mobile Camera Test Feed' : telemetry?.cameraStreamUrl ? 'Live IoT Camera Stream' : 'Waiting for camera stream'}</span>
           </span>
         </div>
       </div>
